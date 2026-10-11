@@ -2,5 +2,9 @@
 corpus/*.json
 # Model binaries are downloaded at setup time, never committed
 models/*.gguf
+# Local database backups (derived data, restorable via pg_restore)
+backups/
+# Local secrets
+.env
 __pycache__/
 *.pyc
