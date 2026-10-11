@@ -1,0 +1,6 @@
+# Corpus data is downloaded at setup time, never committed
+corpus/*.json
+# Model binaries are downloaded at setup time, never committed
+models/*.gguf
+__pycache__/
+*.pyc
