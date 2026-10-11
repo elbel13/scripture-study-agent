@@ -66,21 +66,17 @@ if ! psql "$SUPER_DB_URL" -c "SELECT 1" >/dev/null 2>&1; then
 ALTER USER postgres WITH PASSWORD :'pw';
 SELECT 'CREATE DATABASE scriptures' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'scriptures')\gexec
 CREATE EXTENSION IF NOT EXISTS vector;
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'scripture') THEN
-    CREATE USER scripture WITH PASSWORD :'pw';
-  END IF;
-END $$;
+-- NB: psql :'var' interpolation does NOT happen inside DO $$ blocks
+-- (dollar-quoted string), so use top-level \gexec instead.
+SELECT format('CREATE USER scripture WITH PASSWORD %L', :'pw')
+  WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'scripture')\gexec
 GRANT ALL PRIVILEGES ON DATABASE scriptures TO scripture;
 SQL
 else
   psql "$SUPER_DB_URL" -v ON_ERROR_STOP=1 -v pw="$POSTGRES_PASSWORD" <<'SQL'
 CREATE EXTENSION IF NOT EXISTS vector;
-DO $$ BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'scripture') THEN
-    CREATE USER scripture WITH PASSWORD :'pw';
-  END IF;
-END $$;
+SELECT format('CREATE USER scripture WITH PASSWORD %L', :'pw')
+  WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'scripture')\gexec
 GRANT ALL PRIVILEGES ON DATABASE scriptures TO scripture;
 SQL
 fi

@@ -3,6 +3,10 @@
 
 CREATE EXTENSION IF NOT EXISTS vector;
 
+-- Idempotent: setup.sh re-runs safely.
+DROP TABLE IF EXISTS verses;
+DROP TABLE IF EXISTS works;
+
 CREATE TABLE works (
     id      serial PRIMARY KEY,
     code    text UNIQUE NOT NULL,   -- 'bofm', 'ot', 'nt', 'dc', 'pgp'
