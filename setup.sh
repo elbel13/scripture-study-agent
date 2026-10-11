@@ -104,6 +104,10 @@ CREATE EXTENSION IF NOT EXISTS vector;
 SELECT format('CREATE USER scripture WITH PASSWORD %L', :'pw')
   WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'scripture')\gexec
 GRANT ALL PRIVILEGES ON DATABASE scriptures TO scripture;
+-- App user must own the tables (ingest_bom.py re-runs the schema as the app
+-- user, including DROP TABLE). Clear any superuser-owned leftovers first.
+DROP TABLE IF EXISTS verses, works;
+GRANT CREATE ON SCHEMA public TO scripture;
 SQL
 else
   psql "$SUPER_DB_URL" -v ON_ERROR_STOP=1 -v pw="$POSTGRES_PASSWORD" <<'SQL'
@@ -111,13 +115,13 @@ CREATE EXTENSION IF NOT EXISTS vector;
 SELECT format('CREATE USER scripture WITH PASSWORD %L', :'pw')
   WHERE NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'scripture')\gexec
 GRANT ALL PRIVILEGES ON DATABASE scriptures TO scripture;
+DROP TABLE IF EXISTS verses, works;
+GRANT CREATE ON SCHEMA public TO scripture;
 SQL
 fi
 
 echo "== schema =="
-psql "$SUPER_DB_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
-psql "$SUPER_DB_URL" -v ON_ERROR_STOP=1 -c \
-  "GRANT ALL ON ALL TABLES IN SCHEMA public TO scripture; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO scripture;"
+psql "$APP_DB_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
 
 echo "== corpus =="
 mkdir -p corpus
