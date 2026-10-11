@@ -120,9 +120,6 @@ GRANT CREATE ON SCHEMA public TO scripture;
 SQL
 fi
 
-echo "== schema =="
-psql "$APP_DB_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
-
 echo "== corpus =="
 mkdir -p corpus
 if [[ ! -f corpus/bom-flat.json ]]; then
@@ -130,8 +127,31 @@ if [[ ! -f corpus/bom-flat.json ]]; then
     https://raw.githubusercontent.com/bcbooks/scriptures-json/master/flat/book-of-mormon-flat.json
 fi
 
-echo "== ingest =="
-python3 ingest/ingest_bom.py --corpus corpus/bom-flat.json --db "$APP_DB_URL" --schema db/schema.sql
+# State-aware rebuild: a persisted volume (./data in compose mode) already
+# holds the loaded + embedded verses, so re-running must NOT drop and reload.
+# Only rebuild what is actually missing.
+TABLE_EXISTS=$(psql "$APP_DB_URL" -t -A -c "SELECT to_regclass('public.verses') IS NOT NULL;")
+if [[ "$TABLE_EXISTS" == "t" ]]; then
+  VERSE_COUNT=$(psql "$APP_DB_URL" -t -A -c "SELECT count(*) FROM verses;")
+  EMBED_COUNT=$(psql "$APP_DB_URL" -t -A -c "SELECT count(*) FROM verses WHERE embedding IS NOT NULL;")
+else
+  VERSE_COUNT=0
+  EMBED_COUNT=0
+fi
+# Expected count comes from the corpus itself; ingest_bom.py independently
+# checksums against 6604 and fails loudly on mismatch.
+EXPECTED_COUNT=$(python3 -c "import json; print(len(json.load(open('corpus/bom-flat.json'))['verses']))")
+
+echo "== schema + ingest =="
+if [[ "$EXPECTED_COUNT" -gt 0 && "$VERSE_COUNT" -eq "$EXPECTED_COUNT" ]]; then
+  echo "verses already loaded ($VERSE_COUNT/$EXPECTED_COUNT), skipping schema + ingest"
+else
+  echo "loading schema + ingesting (have $VERSE_COUNT/$EXPECTED_COUNT verses)"
+  psql "$APP_DB_URL" -v ON_ERROR_STOP=1 -f db/schema.sql
+  python3 ingest/ingest_bom.py --corpus corpus/bom-flat.json --db "$APP_DB_URL" --schema db/schema.sql
+  VERSE_COUNT=$EXPECTED_COUNT
+  EMBED_COUNT=0  # fresh ingest carries no embeddings
+fi
 
 echo "== embedding model =="
 export OLLAMA_HOST
@@ -155,7 +175,12 @@ if ! ocli list 2>/dev/null | grep -q "$EMBED_MODEL"; then
 fi
 
 echo "== embeddings =="
-python3 ingest/embed.py --db "$APP_DB_URL" --batch 32
+if [[ "$VERSE_COUNT" -gt 0 && "$EMBED_COUNT" -eq "$VERSE_COUNT" ]]; then
+  echo "all $VERSE_COUNT verses already embedded, skipping"
+else
+  # embed.py is incremental anyway: it only embeds rows with NULL embeddings
+  python3 ingest/embed.py --db "$APP_DB_URL" --batch 32
+fi
 
 echo "== verify =="
 python3 search/search.py --db "$APP_DB_URL" "verses about faith" --k 3
