@@ -34,6 +34,9 @@ def main():
 
     qvec = embed_query(args.query)
     with psycopg.connect(args.db) as conn:
+        # Default ef_search=40 has poor recall on this corpus; 100 reliably
+        # finds the true nearest neighbors (verified against exact scan).
+        conn.execute("SET hnsw.ef_search = 100")
         rows = conn.execute(
             "SELECT reference, text, embedding <=> %s AS distance "
             "FROM verses WHERE embedding IS NOT NULL "
