@@ -2,7 +2,7 @@
 # End-to-end repeatable rollout for scripture-study-agent.
 # Idempotent: safe to re-run. Two modes:
 #
-#   ./setup.sh            # docker compose (postgres + ollama containers)
+#   ./setup.sh            # containers via podman (preferred) or docker
 #   ./setup.sh --local    # native install on Ubuntu/Debian (installs what's missing)
 set -euo pipefail
 cd "$(dirname "$0")"

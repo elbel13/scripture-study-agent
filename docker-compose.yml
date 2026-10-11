@@ -1,6 +1,6 @@
 services:
   db:
-    image: pgvector/pgvector:pg16
+    image: docker.io/pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scripture}
@@ -19,7 +19,7 @@ services:
       retries: 20
 
   ollama:
-    image: ollama/ollama:latest
+    image: docker.io/ollama/ollama:latest
     ports:
       - "${OLLAMA_PORT:-11434}:11434"
     volumes:
