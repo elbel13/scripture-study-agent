@@ -4,6 +4,9 @@ corpus/*.json
 models/*.gguf
 # Local database backups (derived data, restorable via pg_restore)
 backups/
+# Container data (bind mounts): postgres data + ollama models.
+# Lives here so it survives VM replacement; never committed.
+data/
 # Local secrets
 .env
 __pycache__/

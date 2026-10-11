@@ -17,7 +17,29 @@ at install time, so every user builds their own private copy.
 - `ingest/embed.py` — verse embeddings via local Ollama (`nomic-embed-text`), reference-prefixed
 - `search/search.py` — cosine-similarity search CLI
 
-## Setup (Phase 1)
+## Setup
+
+### Option A: containers (recommended)
+
+Podman is the default (daemonless, rootless, no licensing concerns); Docker
+works too — `setup.sh` uses whichever is installed.
+
+```bash
+cp .env.example .env   # adjust password if desired
+./setup.sh             # podman compose up, db, ingest, embeddings, verify
+```
+
+Container data (Postgres + Ollama models) lives in `./data/` as bind mounts,
+so it survives VM replacement — named volumes would be wiped with the VM.
+`./data/` is gitignored; back it up if the embeddings took hours to build.
+
+### Option B: native (Ubuntu/Debian VM)
+
+```bash
+./setup.sh --local     # apt-installs postgres+pgvector/ollama if missing, then same flow
+```
+
+### Manual (Phase 1 original)
 
 ```bash
 # Postgres 16 + pgvector, then:

@@ -7,8 +7,11 @@ services:
       POSTGRES_DB: scriptures
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
+    # Bind mount under the project dir (./data), NOT a named volume:
+    # named volumes live outside $HOME and are wiped when the VM is replaced.
+    # :z keeps SELinux (Fedora etc.) happy; ignored elsewhere.
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data:z
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d scriptures"]
       interval: 5s
@@ -20,7 +23,8 @@ services:
     ports:
       - "${OLLAMA_PORT:-11434}:11434"
     volumes:
-      - ollama_models:/root/.ollama
+      - ./data/ollama:/root/.ollama:z
+      - ./models:/models:ro,z
     # GPU passthrough (uncomment on hosts with NVIDIA):
     # deploy:
     #   resources:
@@ -29,7 +33,3 @@ services:
     #         - driver: nvidia
     #           count: 1
     #           capabilities: [gpu]
-
-volumes:
-  pgdata:
-  ollama_models:

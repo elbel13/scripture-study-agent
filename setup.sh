@@ -16,6 +16,37 @@ SUPER_DB_URL="dbname=scriptures user=postgres password=${POSTGRES_PASSWORD} host
 OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
 EMBED_MODEL="nomic-embed-text"
 
+# Container runtime abstraction: prefer Podman (daemonless, rootless,
+# no licensing strings attached), fall back to Docker. Both speak the
+# same compose file.
+compose() {
+  if command -v podman >/dev/null && podman compose version >/dev/null 2>&1; then
+    podman compose "$@"
+  elif command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+  elif command -v podman-compose >/dev/null; then
+    podman-compose "$@"
+  elif command -v docker-compose >/dev/null; then
+    docker-compose "$@"
+  else
+    echo "no container runtime found (need podman or docker with compose)" >&2
+    return 1
+  fi
+}
+
+# ollama CLI: host binary preferred; in compose mode without a host binary,
+# run it inside the ollama container (./models is mounted at /models there).
+ocli() {
+  if command -v ollama >/dev/null 2>&1; then
+    ollama "$@"
+  elif [[ "$MODE" == "--compose" ]]; then
+    compose exec -T ollama ollama "$@"
+  else
+    echo "ollama CLI not found and no container runtime active" >&2
+    return 1
+  fi
+}
+
 bootstrap_ubuntu() {
   # Make apt usable: drop dead mirrors that hang `apt-get update`.
   if grep -rl cogentco /etc/apt/sources.list.d/ 2>/dev/null | grep -q .; then
@@ -50,9 +81,11 @@ bootstrap_ubuntu() {
 }
 
 if [[ "$MODE" == "--compose" ]]; then
-  docker compose up -d
+  # Data lives in ./data (bind mounts), which survives VM replacement.
+  mkdir -p data/postgres data/ollama
+  compose up -d
   echo "waiting for postgres..."
-  until docker compose exec -T db pg_isready -U postgres -d scriptures >/dev/null 2>&1; do sleep 2; done
+  until compose exec -T db pg_isready -U postgres -d scriptures >/dev/null 2>&1; do sleep 2; done
 elif [[ "$MODE" == "--local" ]]; then
   bootstrap_ubuntu
 else
@@ -98,15 +131,22 @@ python3 ingest/ingest_bom.py --corpus corpus/bom-flat.json --db "$APP_DB_URL" --
 
 echo "== embedding model =="
 export OLLAMA_HOST
-if ! ollama list 2>/dev/null | grep -q "$EMBED_MODEL"; then
-  if ! ollama pull "$EMBED_MODEL" 2>/dev/null; then
+if ! ocli list 2>/dev/null | grep -q "$EMBED_MODEL"; then
+  if ! ocli pull "$EMBED_MODEL" 2>/dev/null; then
     echo "registry pull failed, falling back to HuggingFace download"
     mkdir -p models
     if [[ ! -f models/nomic-embed-text-v1.5.f16.gguf ]]; then
       curl -sSL -o models/nomic-embed-text-v1.5.f16.gguf \
         https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF/resolve/main/nomic-embed-text-v1.5.f16.gguf
     fi
-    (cd models && printf 'FROM ./nomic-embed-text-v1.5.f16.gguf\n' > Modelfile && ollama create "$EMBED_MODEL" -f Modelfile)
+    printf 'FROM ./nomic-embed-text-v1.5.f16.gguf\n' > models/Modelfile
+    if command -v ollama >/dev/null 2>&1; then
+      (cd models && ollama create "$EMBED_MODEL" -f Modelfile)
+    else
+      # compose mode without host CLI: create inside the container
+      # (./models is mounted at /models, relative FROM resolves there)
+      compose exec -T ollama ollama create "$EMBED_MODEL" -f /models/Modelfile
+    fi
   fi
 fi
 
